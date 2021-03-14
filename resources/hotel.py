@@ -24,52 +24,64 @@ hoteis = [{ 'hotel_id': 'alpha',
 
 class Hoteis(Resource):
     def get(self):
-        return {'hoteis': hoteis}
+        return {'hoteis': [hotel.json() for hotel in HotelModel.query.all()]}
 
 class Hotel(Resource):
-    argumentos = reqparse.RequestParser()
-    argumentos.add_argument('nome')
-    argumentos.add_argument('estrelas')
-    argumentos.add_argument('diaria')
-    argumentos.add_argument('cidade')
-
-
-    def find_hotel(hotel_id):
-        for hotel in hoteis:
-            if hotel['hotel_id'] == hotel_id:
-                return hotel
-        return None
+    atributos = reqparse.RequestParser()
+    atributos.add_argument('nome', type=str, required=True, help='O campo NOME não pode ficar vazio')
+    atributos.add_argument('estrelas', type=str, required=True, help='O campo ESTRELAS não pode ficar vazio')
+    atributos.add_argument('diaria')
+    atributos.add_argument('cidade')
 
 
     def get(self, hotel_id):
-        hotel = Hotel.find_hotel(hotel_id)
+        hotel = HotelModel.find_hotel(hotel_id)
         if hotel:
-            return hotel
+            return hotel.json()
         return {'messege': 'Hotel not found'}, 404 #Error
 
 
     def post(self, hotel_id):
-        dados = Hotel.argumentos.parse_args()
-        hotel_objeto = HotelModel(hotel_id, **dados)
-        novo_hotel = hotel_objeto.json()
-        hoteis.append(novo_hotel)
-        return novo_hotel, 200 # Adiciona o hotel a lista com sucesso
+        if HotelModel.find_hotel(hotel_id):
+            return {'menssagem': f'{hotel_id} já existe'}, 400 #Requisição errada
+        dados = Hotel.atributos.parse_args()
+        hotel = HotelModel(hotel_id, **dados)
+        try:
+            hotel.save_hotel()
+        except:
+            return {'message': 'Não foi possivel salvar os dados hotel, tente novamente'}, 500 #Problema interno no servidor
+        return hotel.json(), 200 # Adiciona o hotel a lista com sucesso
 
 
     def put(self, hotel_id):
-        dados = Hotel.argumentos.parse_args()
-        hotel_objeto = HotelModel(hotel_id, **dados)
-        novo_hotel = hotel_objeto.json()
-        hotel = Hotel.find_hotel(hotel_id)
-        if hotel:
-            hotel.update(novo_hotel)
-            return novo_hotel, 200 # Tudo ok
-        hoteis.append(novo_hotel)
-        return novo_hotel, 201 # Criado com sucesso
+        dados = Hotel.atributos.parse_args()
+        hotel_encontrado = HotelModel.find_hotel(hotel_id)
+
+
+        if hotel_encontrado:
+            hotel_encontrado.update_hotel(**dados)
+            try:
+                hotel_encontrado.save_hotel()
+            except:
+                return {'message': 'Não foi possivel salvar os dados hotel, tente novamente'}, 500 #Problema interno no servidor
+            return hotel_encontrado.json(), 200 # Tudo ok
+
+
+        hotel = HotelModel(hotel_id, **dados)
+        try:
+            hotel.save_hotel()
+        except:
+            return {'message': 'Não foi possivel salvar os dados hotel, tente novamente'}, 500 #Problema interno no servidor
+        return hotel.json(), 201 # Criado com sucesso
 
 
 
     def delete(self, hotel_id):
-        global hoteis
-        hoteis = [hotel for hotel in hoteis if hotel['hotel_id'] != hotel_id]
-        return {'message': 'Hotel Deletado.'}
+        hotel = HotelModel.find_hotel(hotel_id)
+        if hotel:
+            try:
+                hotel.delete_hotel()
+            except:
+                return {'message': 'Não foi possivel deletar hotel, tente novamente'}, 500 #Problema interno no servidor
+            return {'message': 'Hotel Deletado.'}
+        return {'message': 'Hotel não existe'}
